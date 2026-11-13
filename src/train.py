@@ -1,7 +1,10 @@
-"""Model compilation, callbacks, and training loop."""
+"""Training setup, callbacks, and history plotting."""
 
 import os
+from pathlib import Path
+from typing import Optional
 
+import matplotlib.pyplot as plt
 import tensorflow as tf
 from keras import Model, callbacks, optimizers
 
@@ -17,7 +20,6 @@ from config import (
 
 
 def compile_model(model: Model, learning_rate: float = LEARNING_RATE) -> Model:
-    """Compile the model with Adam + categorical cross-entropy + accuracy."""
     model.compile(
         optimizer=optimizers.Adam(learning_rate=learning_rate),
         loss="categorical_crossentropy",
@@ -28,9 +30,8 @@ def compile_model(model: Model, learning_rate: float = LEARNING_RATE) -> Model:
 
 def get_callbacks(
     patience: int = PATIENCE,
-    checkpoint_path: str = None,
+    checkpoint_path: Optional[str] = None,
 ) -> list:
-    """Return early stopping, checkpointing, and LR-reduction callbacks."""
     if checkpoint_path is None:
         os.makedirs(MODELS_DIR, exist_ok=True)
         checkpoint_path = os.path.join(MODELS_DIR, CHECKPOINT_NAME)
@@ -65,7 +66,6 @@ def make_dataset(
     augmenter=None,
     shuffle: bool = True,
 ) -> tf.data.Dataset:
-    """Build a batched tf.data pipeline, optionally augmenting every epoch."""
     ds = tf.data.Dataset.from_tensor_slices((x, y))
 
     if shuffle:
@@ -87,55 +87,49 @@ def train_model(
     batch_size: int = BATCH_SIZE,
     use_augmentation: bool = True,
     augmenter=None,
-) -> object:
-    """Train with per-epoch on-the-fly augmentation via tf.data.
-
-    Returns the training history object.
-    """
-    callbacks_list = get_callbacks()
-    active_augmenter = augmenter if use_augmentation else None
-
+) -> callbacks.History:
     train_ds = make_dataset(
-        data["x_train"], data["y_train"], batch_size, active_augmenter
+        data["x_train"],
+        data["y_train"],
+        batch_size,
+        augmenter if use_augmentation else None,
     )
-    val_ds = make_dataset(
-        data["x_val"], data["y_val"], batch_size, None, shuffle=False
-    )
+    val_ds = make_dataset(data["x_val"], data["y_val"], batch_size, shuffle=False)
 
-    history = model.fit(
+    return model.fit(
         train_ds,
         validation_data=val_ds,
         epochs=epochs,
-        callbacks=callbacks_list,
+        callbacks=get_callbacks(),
         verbose=1,
     )
-    return history
 
 
-def plot_training_history(history, save_path: str = None) -> None:
-    """Plot training and validation loss + accuracy curves."""
-    import matplotlib.pyplot as plt
+def plot_training_history(
+    history: callbacks.History, save_path: Optional[str] = None
+) -> None:
+    fig, (ax_loss, ax_acc) = plt.subplots(1, 2, figsize=(12, 4))
 
-    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 4))
+    ax_loss.plot(history.history["loss"], label="train")
+    ax_loss.plot(history.history["val_loss"], label="val")
+    ax_loss.set_title("Loss")
+    ax_loss.set_xlabel("Epoch")
+    ax_loss.set_ylabel("Loss")
+    ax_loss.legend()
+    ax_loss.grid(True)
 
-    ax1.plot(history.history["loss"], label="train")
-    ax1.plot(history.history["val_loss"], label="val")
-    ax1.set_title("Loss")
-    ax1.set_xlabel("Epoch")
-    ax1.set_ylabel("Loss")
-    ax1.legend()
-    ax1.grid(True)
+    ax_acc.plot(history.history["accuracy"], label="train")
+    ax_acc.plot(history.history["val_accuracy"], label="val")
+    ax_acc.set_title("Accuracy")
+    ax_acc.set_xlabel("Epoch")
+    ax_acc.set_ylabel("Accuracy")
+    ax_acc.legend()
+    ax_acc.grid(True)
 
-    ax2.plot(history.history["accuracy"], label="train")
-    ax2.plot(history.history["val_accuracy"], label="val")
-    ax2.set_title("Accuracy")
-    ax2.set_xlabel("Epoch")
-    ax2.set_ylabel("Accuracy")
-    ax2.legend()
-    ax2.grid(True)
+    fig.tight_layout()
 
-    plt.tight_layout()
     if save_path:
-        os.makedirs(os.path.dirname(save_path), exist_ok=True)
-        plt.savefig(save_path, dpi=120, bbox_inches="tight")
+        Path(save_path).parent.mkdir(parents=True, exist_ok=True)
+        fig.savefig(save_path, dpi=120, bbox_inches="tight")
+
     plt.show()
