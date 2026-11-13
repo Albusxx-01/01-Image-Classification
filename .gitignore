@@ -1,0 +1,17 @@
+# Python
+__pycache__/
+*.py[cod]
+
+# Notebooks
+.ipynb_checkpoints/
+
+# Environments
+.venv/
+venv/
+
+# Datasets (downloaded in Colab)
+data/
+
+# Local-only planning documents (kept on disk, not pushed)
+pre-build docs/
+learnings/
